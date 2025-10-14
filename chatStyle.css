@@ -1,0 +1,324 @@
+/* ====== 即時對話頁 ====== */
+.chat-page {
+  /* 以 CSS 變數控制對話區高度百分比：--conv-h */
+  --conv-h: 60%;
+  display: grid;
+  grid-template-columns: 22% 1fr 22%;
+  /* 三列：對話內容 / 分隔線 / 編輯區 */
+  grid-template-rows: var(--conv-h) 8px calc(100% - var(--conv-h) - 8px);
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+/* (1) 客戶在線列表 */
+.chat-online {
+  grid-column: 1 / 2;
+  grid-row: 1 / 4; /* 跨三列（含分隔線） */
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat-online__header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f5;
+  font-weight: 600;
+}
+.chat-online__search {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef2f5;
+}
+.chat-online__search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  background: #f8fafc;
+  outline: none;
+}
+.chat-online__list {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+.online-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f2f4f7;
+  cursor: pointer;
+}
+.online-item:hover {
+  background: #f8fbff;
+}
+.online-item__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #3498db20;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: #3498db;
+  font-weight: 700;
+}
+.online-item__name {
+  font-size: 14px;
+  color: #2c3e50;
+}
+.online-item__badge {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #27ae6020;
+  color: #27ae60;
+}
+
+/* (2) 對話內容 */
+.chat-conv {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 120px;
+}
+.chat-conv__header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.chat-conv__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+}
+.msg-row {
+  display: flex;
+  margin-bottom: 10px;
+}
+.msg-row.me {
+  justify-content: flex-end;
+}
+.msg-bubble {
+  max-width: 70%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e6e9ef;
+  background: #f8fafc;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.msg-row.me .msg-bubble {
+  background: #e8f3ff;
+  border-color: #d1e7ff;
+}
+.msg-meta {
+  font-size: 11px;
+  color: #8a99a6;
+  margin-top: 4px;
+}
+
+/* 2.5) 分隔線（Splitter） */
+.chat-splitter {
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  background: linear-gradient(180deg, #e9edf3, #dfe5ee);
+  border: 1px solid #d7deea;
+  border-left: none;
+  border-right: none;
+  cursor: row-resize;
+  position: relative;
+  user-select: none;
+}
+.chat-splitter::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 4px;
+  border-radius: 999px;
+  background: #b8c4d6;
+}
+
+/* (3) 客服訊息編輯區 */
+.chat-editor {
+  grid-column: 2 / 3;
+  grid-row: 3 / 4;
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
+}
+.chat-editor__toolbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef2f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-editor__body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 12px;
+}
+#chatTextarea {
+  width: 100%;
+  min-height: 80px;
+  max-height: 200px;
+  resize: none;
+  overflow: auto;
+  padding: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid #ccd1d9;
+  border-radius: 8px;
+  background: #f8fafc;
+  outline: none;
+}
+.chat-editor__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-send {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-send:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* (4) 常用短語選擇區（分組＋搜尋） */
+.chat-phrases {
+  grid-column: 3 / 4;
+  grid-row: 1 / 4; /* 跨三列（含分隔線） */
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat-phrases__header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f5;
+  font-weight: 600;
+}
+
+/* 分類切換：公用 / 個人 */
+.phrase-cats {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px 0 12px;
+}
+.phrase-cat {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #e6e9ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.phrase-cat.is-active {
+  background: #e8f3ff;
+  border-color: #d1e7ff;
+  font-weight: 600;
+}
+
+/* 工具列：搜尋 + 分組標籤 */
+.chat-phrases__tools {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f5;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.phrase-search input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  background: #f8fafc;
+  outline: none;
+}
+.phrase-tabs {
+  display: flex;
+  gap: 8px;
+  overflow: auto;
+  padding-bottom: 2px;
+}
+.phrase-tab {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #e6e9ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.phrase-tab.is-active {
+  background: #e8f3ff;
+  border-color: #d1e7ff;
+  font-weight: 600;
+}
+
+.chat-phrases__body {
+  padding: 12px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+.phrase-btn {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid #e6e9ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 13px;
+  cursor: pointer;
+}
+.phrase-btn:hover {
+  background: #f0f7ff;
+}
+
+/* 小尺寸調整 */
+@media (max-width: 1100px) {
+  .chat-page {
+    grid-template-columns: 30% 70%;
+    grid-template-rows: var(--conv-h) 8px calc(100% - var(--conv-h) - 8px);
+  }
+  .chat-phrases {
+    grid-column: 1 / 3;
+    grid-row: 3 / 4;
+  }
+  .chat-online {
+    grid-row: 1 / 4;
+  }
+  .chat-editor {
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+  }
+}

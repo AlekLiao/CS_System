@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <title>後台管理系統</title>
+    <link rel="stylesheet" href="indexStyle.css">
+    <link rel="stylesheet" href="chatStyle.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- 左邊 frame -->
+        <div class="left-frame">
+            <div class="dropdown">
+                <button id="chatBtn">客服對話</button>
+            </div>
+
+            <div class="dropdown">
+                <button id="settingsBtn">系統設置</button>
+                <div class="dropdown-menu">
+                    <div class="dropdown-item" data-action="user-manage">人員管理</div>
+                    <div class="dropdown-item" data-action="user-manage">角色權限設置</div>
+                </div>
+            </div>
+
+            <button id="logoutBtn" class="logout">登出</button>
+        </div>
+
+        <!-- 右邊 frame -->
+        <div class="right-frame" id="rightFrame">
+            這裡是右邊內容區
+        </div>
+    </div>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="index.js"></script>
+    <script src="chat.js"></script>
+</body>
+
+</html>

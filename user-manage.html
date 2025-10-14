@@ -1,0 +1,107 @@
+<div class="people-page">
+    <!-- 上區塊 -->
+    <div class="people-topbar">
+        <label for="accountInput">人員賬號</label>
+        <input type="text" id="accountInput" placeholder="輸入人員賬號">
+        <button class="btn btn-search" id="btnSearch">Search</button>
+        <button class="btn btn-role" id="btnRole">角色管理</button>
+        <button class="btn btn-add" id="btnAdd">新增人員</button>
+    </div>
+
+    <!-- 下區塊 -->
+    <div class="people-content">
+        <table class="table" id="peopleTable">
+            <thead>
+                <tr>
+                    <th>賬號</th>
+                    <th>暱稱</th>
+                    <th>角色</th>
+                    <th>部門</th>
+                    <th>狀態</th>
+                    <th>創建時間</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>user001</td>
+                    <td>8+9</td>
+                    <td>客服</td>
+                    <td>客服部</td>
+                    <td>啟用</td>
+                    <td>YYYY-MM-DD hh:mm:ss</td>
+                    <td>
+                        <button class="btn btn-role">編輯角色</button>
+                        <button class="btn btn-add" style="background:#e67e22">停用</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 新增人員彈窗 -->
+    <div class="rf-modal-overlay" id="addUserOverlay">
+        <div class="rf-modal" role="dialog" aria-modal="true" aria-labelledby="addUserTitle">
+            <div class="rf-modal-header" id="addUserTitle">新增人員</div>
+            <div class="rf-modal-body">
+                <div class="rf-form-row">
+                    <label for="u_name">人員名稱</label>
+                    <input type="text" id="u_name" placeholder="輸入人員名稱">
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_nick">暱稱</label>
+                    <input type="text" id="u_nick" placeholder="輸入人員暱稱">
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_pwd">密碼</label>
+                    <input type="password" id="u_pwd" placeholder="輸入登入密碼">
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_pwd2">確認密碼</label>
+                    <input type="password" id="u_pwd2" placeholder="再次確認登入密碼">
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_dept">部門</label>
+                    <select id="u_dept">
+                        <!--option value="" disabled selected>請選擇部門</option> -->
+                        <option value="客服部">客服部</option>
+                        <option value="管理部">管理部</option>
+                    </select>
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_role">角色</label>
+                    <select id="u_role">
+                        <!--option value="" disabled selected>請選擇角色</option> -->
+                        <option value="主管">主管</option>
+                        <option value="資深人員">資深人員</option>
+                        <option value="管理人員">管理人員</option>
+                    </select>
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_active">是否啟用</label>
+                    <select id="u_active">
+                        <!--option value="" disabled selected>請選擇</option> -->
+                        <option value="是">是</option>
+                        <option value="否">否</option>
+                    </select>
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_experience">資歷</label>
+                    <select id="u_experience">
+                        <option value="資淺">資淺</option>
+                        <option value="資深">資深</option>
+                    </select>
+                </div>
+                <div class="rf-form-row">
+                    <label for="u_note">備註</label>
+                    <input type="text" id="u_note">
+                </div>
+            </div>
+            <div class="rf-modal-footer">
+                <button class="btn btn-clear" id="clearContent">清除</button>
+                <button class="btn btn-cancel" id="addUserCancel">取消</button>
+                <button class="btn btn-confirm" id="addUserConfirm">確認</button>
+            </div>
+        </div>
+    </div>
+</div>

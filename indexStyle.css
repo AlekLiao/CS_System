@@ -1,0 +1,338 @@
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+}
+
+/* 左邊 frame */
+.left-frame {
+  width: 8%;
+  background-color: #2c3e50; /* 深藍 */
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* 靠上 */
+  padding-top: 30px;
+  gap: 15px;
+}
+
+.left-frame button {
+  width: 80%; /* 固定佔 left-frame 的 80% */
+  padding: 10px 20px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+/* 系統設置 dropdown */
+.dropdown {
+  position: relative;
+  width: 80%;
+}
+#chatBtn {
+  width: 100%;
+  background-color: #3498db;
+  color: #fff;
+}
+
+#settingsBtn {
+  width: 100%;
+  background-color: #3498db;
+  color: #fff;
+}
+#settingsBtn:hover {
+  background-color: #2980b9;
+}
+
+/* 登出按鈕 */
+#logoutBtn {
+  background-color: #e74c3c;
+  color: #fff;
+}
+#logoutBtn:hover {
+  background-color: #c0392b;
+}
+
+/* 設置選單顯示在按鈕右邊 */
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 180px;
+  background-color: #34495e;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+}
+.dropdown-item {
+  padding: 10px;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+}
+.dropdown-item:hover {
+  background-color: #3d566e;
+}
+
+.dropdown:hover .dropdown-menu {
+  display: block;
+}
+
+/*
+.dropdown.open .dropdown-menu {
+  display: block;
+}
+*/
+
+/* 右邊 frame */
+.right-frame {
+  flex: 1;
+  background-color: #ecf0f1; /* 淺灰 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  font-size: 18px;
+  /* 讓內頁能使用 5% / 95% 區塊配置 */
+  flex-direction: column;
+}
+
+/* ===== 人員管理頁面樣式 ===== */
+
+.people-page {
+  /* 讓內容撐滿 right-frame 高度，方便用 5% + 95% */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* 上區塊：固定 right-frame 高度的 5% */
+.people-topbar {
+  flex: 0 0 5%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #dfe4ea;
+}
+
+/* 內部元素 */
+.people-topbar label {
+  font-size: 14px;
+  color: #2c3e50;
+}
+
+.people-topbar input[type="text"] {
+  flex: 1; /* 在可用空間中延展 */
+  min-width: 160px;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  outline: none;
+  background: #f8fafc;
+}
+.people-topbar input[type="text"]:focus {
+  border-color: #3498db;
+  background: #fff;
+}
+
+/* 一致的按鈕風格 */
+.btn {
+  padding: 8px 14px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.05s ease, opacity 0.2s ease;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+
+/* 按鈕配色 */
+.btn-search {
+  background: #3498db;
+  color: #fff;
+}
+.btn-search:hover {
+  opacity: 0.9;
+}
+
+.btn-role {
+  background: #7f8c8d;
+  color: #fff;
+}
+.btn-role:hover {
+  opacity: 0.9;
+}
+
+.btn-add {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-add:hover {
+  opacity: 0.9;
+}
+
+/* 下區塊：佔剩餘 95% */
+.people-content {
+  flex: 1 1 auto;
+  padding: 16px;
+  overflow: auto;
+  width: 100%;
+}
+
+/* 範例表格樣式（先放占位用） */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e3e6ea;
+}
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f5;
+  font-size: 14px;
+}
+.table th {
+  background: #f6f8fa;
+  text-align: left;
+  color: #2c3e50;
+}
+
+/* 讓 right-frame 成為定位容器，彈窗尺寸可用百分比對齊它 */
+.right-frame {
+  position: relative;
+}
+
+/* ====== 通用彈窗（顯示在 right-frame 內）====== */
+.rf-modal-overlay {
+  position: absolute;
+  inset: 0; /* 填滿整個 right-frame */
+  background: rgba(0, 0, 0, 0.35);
+  display: none; /* 預設隱藏 */
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* 彈窗本體：相對 right-frame 的百分比尺寸 */
+.rf-modal {
+  width: 50%; /* right-frame 的 50% */
+  height: 60%; /* right-frame 的 60% */
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 標題列（可選） */
+.rf-modal-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #eef2f5;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+/* 內容區可捲動 */
+.rf-modal-body {
+  flex: 1 1 auto;
+  padding: 16px;
+  overflow: auto;
+}
+
+/* 底部動作列 */
+.rf-modal-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #eef2f5;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* 表單布局：每列 左 label + 右輸入框 */
+.rf-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.rf-form-row label {
+  width: 100px;
+  font-size: 14px;
+  color: #2c3e50;
+}
+.rf-form-row input {
+  flex: 1 1 auto;
+  min-width: 160px;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  outline: none;
+  background: #f8fafc;
+}
+.rf-form-row input:focus {
+  border-color: #3498db;
+  background: #fff;
+}
+
+.rf-form-row select {
+  flex: 1 1 auto;
+  min-width: 160px;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  outline: none;
+  background: #f8fafc;
+}
+.rf-form-row select:focus {
+  border-color: #3498db;
+  background: #fff;
+}
+
+/* 底部按鈕 */
+.btn-cancel {
+  background: #95a5a6;
+  color: #fff;
+}
+.btn-confirm {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-cancel:hover,
+.btn-confirm:hover {
+  opacity: 0.9;
+}
+
+.radio-group {
+  display: flex;
+  gap: 20px; /* 選項間距 */
+  font-size: 14px;
+  color: #2c3e50;
+}
+
+.radio-group input[type="radio"] {
+  margin-right: 6px;
+}

@@ -1,0 +1,22 @@
+{
+  "我的常用": [
+    "您好，我是 {{agent_name}}，我將全程為您服務。",
+    "感謝您提供資訊，我這邊立即處理～"
+  ],
+  "售後跟進": [
+    "我會在 {{follow_time}} 再次回覆您最新進度。",
+    "此案已持續追蹤中，若超過 {{sla}} 仍未完成，我會主動催辦並同步您。"
+  ],
+  "常見定位問題": [
+    "想再請教您目前的裝置/瀏覽器版本？（例：iOS 17 / Android 14 / Chrome 128）",
+    "方便提供當下網路環境（Wi-Fi/4G）與大致所在地嗎？"
+  ],
+  "英語回覆速記": [
+    "Hi there — this is {{agent_name}} from Support. I'll look into this right away.",
+    "Thanks for waiting. I've escalated your case (ID: {{ticket_id}})."
+  ],
+  "簽名/結語": [
+    "— {{agent_name}}｜客服專員",
+    "有任何需要，隨時找我：{{agent_contact}}"
+  ]
+}
