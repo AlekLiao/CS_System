@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <title>線上客服 - 客戶端</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 30px;
+        background: #f6f6f6;
+      }
+      h2 {
+        color: #333;
+      }
+      #status {
+        color: #444;
+        margin-bottom: 10px;
+      }
+      #joinBtn {
+        padding: 10px 18px;
+        font-size: 16px;
+        cursor: pointer;
+        background: #0078d7;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+      }
+      #joinBtn:hover {
+        background: #005fa3;
+      }
+
+      #chat {
+        display: none;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 12px;
+        background: #fff;
+        max-width: 680px;
+      }
+      #roomInfo {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 6px;
+      }
+      #log {
+        height: 280px;
+        overflow-y: auto;
+        border: 1px solid #eee;
+        padding: 8px;
+        border-radius: 6px;
+        background: #fafafa;
+        margin-bottom: 8px;
+      }
+      .msg {
+        margin: 6px 0;
+        line-height: 1.4;
+      }
+      .me {
+        text-align: right;
+        color: #0078d7;
+      }
+      .sys {
+        color: #777;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      #inputArea {
+        display: flex;
+        gap: 6px;
+      }
+      #input {
+        flex: 1;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+      }
+      #sendBtn,
+      #endBtn {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      #sendBtn {
+        background: #0078d7;
+        color: #fff;
+      }
+      #sendBtn:hover {
+        background: #005fa3;
+      }
+      #endBtn {
+        background: #e74c3c;
+        color: #fff;
+      }
+      #endBtn:hover {
+        background: #c0392b;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>線上客服</h2>
+    <p id="status">尚未進線</p>
+    <button id="joinBtn">開始對話</button>
+
+    <div id="chat">
+      <div id="roomInfo"></div>
+      <div id="log"></div>
+      <div id="inputArea">
+        <input id="input" placeholder="輸入訊息..." />
+        <button id="sendBtn">送出</button>
+        <button id="endBtn">結束</button>
+      </div>
+    </div>
+
+    <script>
+      // --- 安全建置 WS URL（支援 file:// 開檔） ---
+      const isSecure = location.protocol === "https:";
+      const host = location.hostname || "localhost";
+      const WS_URL = (isSecure ? "wss://" : "ws://") + host + ":8080";
+
+      const statusEl = document.getElementById("status");
+      const joinBtn = document.getElementById("joinBtn");
+      const chatEl = document.getElementById("chat");
+      const logEl = document.getElementById("log");
+      const inputEl = document.getElementById("input");
+      const sendBtn = document.getElementById("sendBtn");
+      const endBtn = document.getElementById("endBtn");
+      const roomInfoEl = document.getElementById("roomInfo");
+
+      let ws,
+        customerId = null,
+        roomId = null,
+        agentName = "客服";
+      let pendingJoin = false; // ← 記錄使用者想進線，但連線尚未 OPEN
+
+      function append(from, text) {
+        const div = document.createElement("div");
+        div.className = "msg " + (from === "me" ? "me" : "");
+        div.textContent =
+          (from === "me" ? "我：" : from === "agent" ? agentName + "：" : "") +
+          text;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      function sys(text) {
+        const d = document.createElement("div");
+        d.className = "sys";
+        d.textContent = text;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function connect() {
+        if (
+          ws &&
+          (ws.readyState === WebSocket.OPEN ||
+            ws.readyState === WebSocket.CONNECTING)
+        ) {
+          return; // 正在連線或已連線就別重連
+        }
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+          console.log("[WS] open", WS_URL);
+          ws.send(JSON.stringify({ type: "hello", role: "customer" }));
+          statusEl.textContent = "已連線，等待客服接入...";
+
+          // 如果使用者已經按過「開始對話」，在 OPEN 後再送 join_queue
+          if (pendingJoin) {
+            ws.send(JSON.stringify({ type: "join_queue" }));
+            pendingJoin = false;
+          }
+        };
+
+        ws.onerror = (e) => {
+          console.error("[WS] error", e);
+          statusEl.textContent = "無法連線到客服伺服器（" + WS_URL + "）";
+        };
+
+        ws.onclose = () => {
+          console.warn("[WS] closed");
+          statusEl.textContent = "連線已關閉";
+        };
+
+        ws.onmessage = (ev) => {
+          const msg = JSON.parse(ev.data);
+          console.log("[WS] recv:", msg);
+
+          if (msg.type === "hello_ack" && msg.role === "customer") {
+            customerId = msg.customerId;
+          }
+          if (msg.type === "queued") {
+            statusEl.textContent = `已進入佇列，前方尚有 ${Math.max(
+              0,
+              (msg.position || 1) - 1
+            )} 人`;
+            chatEl.style.display = "block"; // 顯示聊天區，讓使用者看到系統訊息
+            sys("系統：您已進入等待佇列");
+          }
+          if (msg.type === "requeued") {
+            statusEl.textContent = "客服中斷，您已回到佇列";
+            sys("系統：客服中斷，您已回到佇列");
+          }
+          if (msg.type === "chat_started") {
+            roomId = msg.roomId;
+            agentName = msg.agentName || "客服";
+            statusEl.textContent = "已接上客服 " + agentName;
+            roomInfoEl.textContent = `會話 ID：${roomId}`;
+            chatEl.style.display = "block";
+            sys(`系統：已接上 ${agentName}`);
+          }
+          if (msg.type === "chat_message" && msg.from === "agent") {
+            append("agent", msg.text);
+          }
+          if (msg.type === "chat_ended") {
+            sys("系統：對話已結束（" + (msg.reason || "") + "）");
+            statusEl.textContent = "對話結束";
+            roomId = null;
+          }
+        };
+      }
+
+      // --- 進線按鈕 ---
+      joinBtn.onclick = () => {
+        // 若未連線 → 先建立連線，並標記 pendingJoin；等 onopen 再送 join_queue
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          pendingJoin = true;
+          connect();
+          statusEl.textContent = "正在連線伺服器...";
+        } else {
+          // 已連線 → 直接送 join_queue
+          ws.send(JSON.stringify({ type: "join_queue" }));
+        }
+      };
+
+      // --- 送出訊息 ---
+      sendBtn.onclick = () => {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        if (!roomId) {
+          sys("系統：尚未接上客服，請稍候。");
+          return;
+        }
+        ws.send(JSON.stringify({ type: "chat_message", roomId, text }));
+        append("me", text);
+        inputEl.value = "";
+      };
+      // 支援按 Enter 送出
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendBtn.click();
+      });
+
+      // --- 結束對話 ---
+      endBtn.onclick = () => {
+        if (roomId) ws.send(JSON.stringify({ type: "end_chat", roomId }));
+      };
+    </script>
+  </body>
+</html>

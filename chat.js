@@ -1,122 +1,53 @@
-document.addEventListener("DOMContentLoaded", () => {
+// chat.js — 將「客服座席(Agent)」整合到 index.html 右側，連線 server.js 收/發真實訊息
+(function () {
+  function init() {
     const rightFrame = document.getElementById("rightFrame");
     const chatBtn = document.getElementById("chatBtn");
+    if (chatBtn) chatBtn.addEventListener("click", () => renderChatPage());
 
-    if (chatBtn) {
-        chatBtn.addEventListener("click", () => {
-            renderChatPage();
-        });
-    }
+    // 供其他腳本也能開啟聊天頁
+    window.renderChatPage = renderChatPage;
 
-    // ===== 可依你的後端調整這裡的路徑規則 =====
-    // 方案A（合併一個Endpoint/檔案）：回傳 { public: {...}, personal: {..., agentId} }
-    const PHRASE_COMBINED_URL = "phrases.json";
+    // 取座席名稱/ID（可從 <body data-agent-name="..."> 帶入）
+    const agentName = window.AGENT_NAME || document.body.dataset.agentName || "客服";
+    let capacity = Number(window.AGENT_CAPACITY || 3) || 3;
 
-    // 方案B（分開兩個Endpoint/檔案）：公用 + 個人
-    const PHRASE_PUBLIC_URL = "data//phrases.pub.json";
-    const PHRASE_PERSONAL_URL = (agentId) => `phrases.personal.${encodeURIComponent(agentId)}.json`;
-    //PHRASE_PERSONAL_URL = (agentId) => \data/personal/${agentId}.json``
+    // === WebSocket URL（支援 file:// 頁面開啟） ===
+    const isSecure = location.protocol === 'https:';
+    const host = location.hostname || 'localhost';
+    const WS_URL = (isSecure ? 'wss://' : 'ws://') + host + ':8080';
 
-    // 取得目前登入的客服帳號（你可以在 index.html 的 <body data-agent-id="AGENT001"> 或在 index.js 設定 window.AGENT_ID）
-    const resolveAgentId = () =>
-        window.AGENT_ID || document.body.dataset.agentId || "demoAgent";
-
-    // 預設資料（後台抓不到時的 fallback）
-    const DEFAULT_PUBLIC = {
-        "開場": ["您好～請問需要什麼協助？", "您好，我是客服，很高興為您服務。"],
-        "查詢/等待": ["收到，我幫您查詢一下，請稍等。"]
-    };
-    const DEFAULT_PERSONAL = {
-        "我的常用": ["（範例）您好，我是小幫手；有任何問題都可以問我！"]
-    };
-
-    /** 將後台返回的「群組」資料（可能是 map 或 array 形式）正規化為 map：{ groupName: string[] } */
-    function normalizeGroups(raw) {
-        if (!raw) return {};
-        // 形態1：{ groups: [{ name, items: [] }, ...] }
-        if (Array.isArray(raw.groups)) {
-            const out = {};
-            for (const g of raw.groups) {
-                if (g && g.name && Array.isArray(g.items)) out[g.name] = g.items.filter(Boolean);
-            }
-            return out;
-        }
-        // 形態2：直接 map 物件：{ "開場": ["...","..."], "結尾": [...] }
-        if (typeof raw === "object") {
-            const out = {};
-            for (const [k, v] of Object.entries(raw)) {
-                if (Array.isArray(v)) out[k] = v.filter(Boolean);
-            }
-            return out;
-        }
-        return {};
-    }
-
-    /** 從後台載入：先試合併（phrases.json），失敗則改抓公用/個人分開；仍失敗用 fallback */
-    async function loadPhraseData(agentId) {
-        // 試合併
-        try {
-            const res = await fetch(PHRASE_COMBINED_URL + "?_t=" + Date.now(), { cache: "no-store" });
-            if (res.ok) {
-                const data = await res.json();
-                const pub = normalizeGroups(data.public);
-                const per = normalizeGroups(data.personal?.groups || data.personal);
-                return {
-                    agentId: data.personal?.agentId || agentId,
-                    publicGroups: Object.keys(pub).length ? pub : DEFAULT_PUBLIC,
-                    personalGroups: Object.keys(per).length ? per : DEFAULT_PERSONAL
-                };
-            }
-        } catch (_) { /* ignore, fallback next */ }
-
-        // 分開抓
-        let publicGroups = {};
-        let personalGroups = {};
-        try {
-            const resPub = await fetch(PHRASE_PUBLIC_URL + "?_t=" + Date.now(), { cache: "no-store" });
-            if (resPub.ok) {
-                publicGroups = normalizeGroups(await resPub.json());
-            }
-        } catch (_) { }
-        try {
-            const resPer = await fetch(PHRASE_PERSONAL_URL(agentId) + "?_t=" + Date.now(), { cache: "no-store" });
-            if (resPer.ok) {
-                personalGroups = normalizeGroups(await resPer.json());
-            }
-        } catch (_) { }
-
-        // fallback
-        if (!Object.keys(publicGroups).length) publicGroups = DEFAULT_PUBLIC;
-        if (!Object.keys(personalGroups).length) personalGroups = DEFAULT_PERSONAL;
-
-        return { agentId, publicGroups, personalGroups };
-    }
-
-    /** 渲染：即時對話頁（含 Splitter + 短語：公用/個人 + 搜尋 + 分組） */
-    async function renderChatPage() {
-        rightFrame.innerHTML = `
+    function renderChatPage() {
+      rightFrame.innerHTML = `
         <div class="chat-page" id="chatPage">
-          <!-- (1) 客戶在線列表 -->
+          <!-- (1) 客戶在線列表 + 佇列資訊 -->
           <section class="chat-online">
             <div class="chat-online__header">客戶在線列表</div>
-            <div class="chat-online__search">
-              <input id="onlineSearch" type="text" placeholder="搜尋暱稱 / ID">
+            <div class="chat-online__search" style="display:flex;gap:8px;align-items:center;">
+              <input id="onlineSearch" type="text" placeholder="搜尋客戶ID / 會話ID">
+            </div>
+            <div style="padding:8px 12px;font-size:12px;color:#8a99a6;display:flex;gap:10px;align-items:center; border-bottom:1px solid #eef2f5;">
+              佇列：<b id="statWaiting">0</b> ｜ 已接：<b id="statActive">0</b> / <b id="statCap">0</b>
+              <span style="margin-left:auto;">
+                <button class="btn" id="btnCapDec">-容量</button>
+                <button class="btn" id="btnCapInc">+容量</button>
+              </span>
             </div>
             <div class="chat-online__list" id="onlineList"></div>
           </section>
-  
+
           <!-- (2) 對話內容 -->
           <section class="chat-conv">
             <div class="chat-conv__header">
               <span>對話內容</span>
-              <span id="convTitle" style="color:#8a99a6;font-weight:400;">（尚未選擇客戶）</span>
+              <span id="convTitle" style="color:#8a99a6;font-weight:400;">（尚未選擇會話）</span>
             </div>
             <div class="chat-conv__body" id="convBody"></div>
           </section>
-  
+
           <!-- (2.5) 分隔線 -->
           <div class="chat-splitter" id="chatSplitter" title="拖曳調整高度 / 雙擊重置"></div>
-  
+
           <!-- (3) 客服訊息編輯區 -->
           <section class="chat-editor">
             <div class="chat-editor__toolbar">
@@ -130,279 +61,288 @@ document.addEventListener("DOMContentLoaded", () => {
               </div>
             </div>
           </section>
-  
-          <!-- (4) 常用短語選擇區 -->
+
+          <!-- (4) 常用短語（樣式沿用，先保留空殼；之後再接你的 phrases.json） -->
           <aside class="chat-phrases">
             <div class="chat-phrases__header">常用短語</div>
-            <div class="phrase-cats" id="phraseCats">
-              <button class="phrase-cat is-active" data-cat="public">公用</button>
-              <button class="phrase-cat" data-cat="personal">個人</button>
-            </div>
-            <div class="chat-phrases__tools">
-              <div class="phrase-search">
-                <input id="phraseSearch" type="text" placeholder="搜尋關鍵字（即時過濾）">
-              </div>
-              <div class="phrase-tabs" id="phraseTabs"></div>
-            </div>
             <div class="chat-phrases__body" id="phrasesBody">
-              <div style="color:#8a99a6;font-size:13px;">（短語載入中…）</div>
+              <div style="color:#8a99a6;font-size:13px;">（之後可接入公用/個人短語）</div>
             </div>
           </aside>
         </div>
       `;
 
-        // ====== 線上客戶（demo） ======
-        const mockUsers = [
-            { id: "U1001", name: "Tony", vip: true },
-            { id: "U1002", name: "Mandy", vip: false },
-            { id: "U1003", name: "Kyle", vip: false },
-            { id: "U1004", name: "小李", vip: true }
-        ];
+      // DOM refs
+      const chatPage = document.getElementById("chatPage");
+      const onlineList = document.getElementById("onlineList");
+      const convBody = document.getElementById("convBody");
+      const convTitle = document.getElementById("convTitle");
+      const ta = document.getElementById("chatTextarea");
+      const btnSend = document.getElementById("btnSend");
+      const btnCapInc = document.getElementById("btnCapInc");
+      const btnCapDec = document.getElementById("btnCapDec");
+      const statWaiting = document.getElementById("statWaiting");
+      const statActive = document.getElementById("statActive");
+      const statCap = document.getElementById("statCap");
 
-        // ====== DOM 參照 ======
-        const chatPage = document.getElementById("chatPage");
-        const onlineList = document.getElementById("onlineList");
-        const convBody = document.getElementById("convBody");
-        const convTitle = document.getElementById("convTitle");
-        const phraseCats = document.getElementById("phraseCats");
-        const phraseTabs = document.getElementById("phraseTabs");
-        const phrasesBody = document.getElementById("phrasesBody");
-        const phraseSearch = document.getElementById("phraseSearch");
-        const ta = document.getElementById("chatTextarea");
-        const btnSend = document.getElementById("btnSend");
-        const splitter = document.getElementById("chatSplitter");
+      // 狀態（rooms = 多會話）
+      let ws, agentId = null;
+      const rooms = new Map(); // roomId -> { customerId, log:[] }
+      let currentRoomId = null;
+      let lastSendAt = 0;
 
-        // ====== 狀態 ======
-        let currentUser = null;
-        let lastSendAt = 0;
+      // === 連上 WS 當座席 ===
+      function connectAgent() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
-        // 線上清單
-        onlineList.innerHTML = mockUsers.map(u => `
-        <div class="online-item" data-id="${u.id}" data-name="${u.name}">
-          <div class="online-item__avatar">${u.name.slice(0, 1).toUpperCase()}</div>
-          <div class="online-item__name">${u.name} <span style="color:#8a99a6;font-size:12px;">#${u.id}</span></div>
-          ${u.vip ? '<span class="online-item__badge">VIP</span>' : ''}
-        </div>
-      `).join("");
+        ws = new WebSocket(WS_URL);
 
-        onlineList.addEventListener("click", e => {
-            const item = e.target.closest(".online-item");
-            if (!item) return;
-            currentUser = { id: item.dataset.id, name: item.dataset.name };
-            convTitle.textContent = `（與 ${currentUser.name} #${currentUser.id} 對話）`;
-            convBody.innerHTML = `
-          <div class="msg-row">
-            <div>
-              <div class="msg-bubble">您好～我是客服，有什麼可以協助您？</div>
-              <div class="msg-meta">客服 · ${new Date().toLocaleTimeString()}</div>
-            </div>
-          </div>
-        `;
-            ta.focus();
-            checkSendEnabled();
-        });
-
-        // ====== 後台載入：公用/個人短語 ======
-        const agentId = resolveAgentId();
-        const { publicGroups, personalGroups } = await loadPhraseData(agentId);
-
-        const CATS = {
-            public: { label: "公用", groups: publicGroups },
-            personal: { label: "個人", groups: personalGroups }
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type:'hello', role:'agent', name: agentName, capacity }));
         };
 
-        let activeCat = "public";  // 'public' | 'personal'
-        let activeGroup = "全部";
-        let keyword = "";
+        ws.onerror = (e) => {
+          console.error('[WS] error', e);
+          appendBubble('sys', '無法連線到伺服器：' + WS_URL);
+        };
 
-        // 類別切換（公用 / 個人）
-        phraseCats.addEventListener("click", (e) => {
-            const btn = e.target.closest(".phrase-cat");
-            if (!btn) return;
-            activeCat = btn.dataset.cat;
-            [...phraseCats.children].forEach(el => el.classList.toggle("is-active", el === btn));
-            activeGroup = "全部"; // 切換類別時重置到「全部」
-            renderGroupTabs();
-            renderPhrases();
-        });
+        ws.onclose = () => {
+          appendBubble('sys', '連線關閉，請重新整理');
+        };
 
-        // 分組 tabs + 搜尋
-        phraseSearch.addEventListener("input", () => {
-            keyword = phraseSearch.value.trim();
-            renderPhrases();
-        });
+        ws.onmessage = (ev) => {
+          const msg = JSON.parse(ev.data);
+          // console.log('[WS] recv:', msg);
 
-        function renderGroupTabs() {
-            const groupsMap = CATS[activeCat].groups || {};
-            const names = ["全部", ...Object.keys(groupsMap)];
-            phraseTabs.innerHTML = names.map((g, i) =>
-                `<button class="phrase-tab${g === activeGroup ? ' is-active' : ''}" data-group="${g}">${g}</button>`
-            ).join("");
-        }
+          if (msg.type === 'hello_ack' && msg.role === 'agent') {
+            agentId = msg.agentId;
+            capacity = msg.capacity || capacity;
+            statCap.textContent = capacity;
+            statActive.textContent = '0';
+          }
 
-        phraseTabs.addEventListener("click", (e) => {
-            const btn = e.target.closest(".phrase-tab");
-            if (!btn) return;
-            activeGroup = btn.dataset.group;
-            [...phraseTabs.children].forEach(el => el.classList.toggle("is-active", el === btn));
-            renderPhrases();
-        });
+          if (msg.type === 'stats') {
+            statWaiting.textContent = msg.waiting ?? 0;
+            statActive.textContent  = msg.activeCount ?? 0;
+            statCap.textContent     = msg.capacity ?? capacity;
+          }
 
-        function renderPhrases() {
-            const groupsMap = CATS[activeCat].groups || {};
-            let list = [];
-            if (activeGroup === "全部") {
-                list = Object.values(groupsMap).flat();
-            } else {
-                list = groupsMap[activeGroup] || [];
+          if (msg.type === 'chat_started') {
+            const { roomId, customerId } = msg;
+            if (!rooms.has(roomId)) {
+              rooms.set(roomId, { customerId, log: [] });
+              addOrUpdateOnlineItem(roomId, customerId);
             }
-            if (keyword) list = list.filter(t => t.includes(keyword));
-            if (!list.length) {
-                const emptyMsg = activeCat === "personal"
-                    ? "（尚未建立個人短語）"
-                    : "（無符合的短語）";
-                phrasesBody.innerHTML = `<div style="color:#8a99a6;font-size:13px;">${emptyMsg}</div>`;
-                return;
+            selectRoom(roomId);
+            appendMsg(roomId, 'sys', '客戶已接入');
+          }
+
+          if (msg.type === 'chat_message') {
+            // 來自客戶
+            appendMsg(msg.roomId, 'other', msg.text);
+          }
+
+          if (msg.type === 'chat_ended') {
+            const rid = msg.roomId;
+            appendMsg(rid, 'sys', '對話已結束');
+            rooms.delete(rid);
+            removeOnlineItem(rid);
+            if (currentRoomId === rid) {
+              currentRoomId = null;
+              convTitle.textContent = '（尚未選擇會話）';
+              convBody.innerHTML = '';
+              checkSendEnabled();
             }
-            phrasesBody.innerHTML = list.map(p =>
-                `<button class="phrase-btn" data-text="${p.replace(/"/g, '&quot;')}">${p}</button>`
-            ).join("");
+          }
+        };
+      }
+
+      // === 左側：客戶在線列表 ===
+      function addOrUpdateOnlineItem(roomId, customerId) {
+        let item = onlineList.querySelector(`[data-room="${roomId}"]`);
+        if (!item) {
+          const div = document.createElement('div');
+          div.className = 'online-item';
+          div.dataset.room = roomId;
+          div.dataset.customerId = customerId;
+          div.innerHTML = `
+            <div class="online-item__avatar">${String(customerId || 'U?').slice(-2).toUpperCase()}</div>
+            <div class="online-item__name">#${roomId.slice(0,6)} <span style="color:#8a99a6;font-size:12px;">客戶 ${customerId || ''}</span></div>
+            <span class="online-item__badge">LIVE</span>
+          `;
+          div.addEventListener('click', () => selectRoom(roomId));
+          onlineList.prepend(div);
         }
+      }
+      function removeOnlineItem(roomId) {
+        const el = onlineList.querySelector(`[data-room="${roomId}"]`);
+        if (el) el.remove();
+      }
+      function selectRoom(roomId) {
+        currentRoomId = roomId;
+        const info = rooms.get(roomId);
+        const title = info ? `（會話 ${roomId.slice(0,6)} · 客戶 ${info.customerId}）` : '（尚未選擇會話）';
+        convTitle.textContent = title;
+        renderLog(roomId);
+        checkSendEnabled();
+      }
 
-        // 初次渲染
-        renderGroupTabs();
-        renderPhrases();
-
-        // 插入短語
-        phrasesBody.addEventListener("click", e => {
-            const btn = e.target.closest(".phrase-btn");
-            if (!btn) return;
-            insertAtCursor(ta, btn.dataset.text);
-            checkSendEnabled();
-        });
-
-        // 工具列
-        document.getElementById("btnInsertTime").addEventListener("click", () => {
-            insertAtCursor(ta, new Date().toLocaleString());
-            checkSendEnabled();
-        });
-        document.getElementById("btnClear").addEventListener("click", () => {
-            ta.value = "";
-            checkSendEnabled();
-            ta.focus();
-        });
-
-        // 編輯框行為
-        ta.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                trySend();
-            }
-        });
-        ta.addEventListener("input", checkSendEnabled);
-        btnSend.addEventListener("click", trySend);
-
-        function checkSendEnabled() {
-            btnSend.disabled = !(currentUser && ta.value.trim().length > 0);
-        }
-
-        function trySend() {
-            if (btnSend.disabled) return;
-            const now = Date.now();
-            if (now - lastSendAt < 600) return; // 防抖
-            lastSendAt = now;
-
-            const text = ta.value.trim();
-            if (!text) return;
-
-            appendMsg("me", text);
-            ta.value = "";
-            checkSendEnabled();
-
-            setTimeout(() => {
-                appendMsg("other", "收到您的訊息，我再確認一下～");
-            }, 800);
-        }
-
-        function appendMsg(side, text) {
-            const row = document.createElement("div");
-            row.className = `msg-row ${side === "me" ? "me" : ""}`;
-            row.innerHTML = `
+      // === 對話內容 ===
+      function renderLog(roomId) {
+        convBody.innerHTML = '';
+        const info = rooms.get(roomId);
+        if (!info) return;
+        for (const m of info.log) appendBubble(m.from, m.text, m.ts);
+        convBody.scrollTop = convBody.scrollHeight;
+      }
+      function appendMsg(roomId, from, text) {
+        const info = rooms.get(roomId);
+        if (!info) return;
+        info.log.push({ from, text, ts: Date.now() });
+        if (currentRoomId === roomId) appendBubble(from, text);
+      }
+      function appendBubble(from, text, ts) {
+        const row = document.createElement("div");
+        const side = (from === 'me') ? 'me' : '';
+        row.className = `msg-row ${side}`;
+        const who = from === 'me' ? '我' : (from === 'sys' ? '系統' : '客戶');
+        const content = (from === 'sys')
+          ? `<em style="color:#8a99a6">${escapeHTML(text)}</em>`
+          : escapeHTML(text).replace(/\n/g, "<br>");
+        row.innerHTML = `
           <div>
-            <div class="msg-bubble">${escapeHTML(text).replace(/\n/g, "<br>")}</div>
-            <div class="msg-meta">${side === "me" ? "我" : "客服/客戶"} · ${new Date().toLocaleTimeString()}</div>
+            <div class="msg-bubble">${content}</div>
+            <div class="msg-meta">${who} · ${new Date(ts || Date.now()).toLocaleTimeString()}</div>
           </div>
         `;
-            convBody.appendChild(row);
-            convBody.scrollTop = convBody.scrollHeight;
+        convBody.appendChild(row);
+        convBody.scrollTop = convBody.scrollHeight;
+      }
+      function escapeHTML(s) {
+        return String(s).replace(/[&<>"']/g, c => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+      }
+
+      // === 發送訊息（傳到當前會話） ===
+      const btnInsertTime = document.getElementById("btnInsertTime");
+      const btnClear = document.getElementById("btnClear");
+      btnInsertTime.addEventListener("click", () => {
+        insertAtCursor(ta, new Date().toLocaleString());
+        checkSendEnabled();
+      });
+      btnClear.addEventListener("click", () => {
+        ta.value = "";
+        checkSendEnabled();
+        ta.focus();
+      });
+
+      function checkSendEnabled() {
+        btnSend.disabled = !(currentRoomId && ta.value.trim().length > 0);
+      }
+      ta.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          trySend();
         }
+      });
+      ta.addEventListener("input", checkSendEnabled);
+      btnSend.addEventListener("click", trySend);
 
-        function insertAtCursor(el, text) {
-            const start = el.selectionStart ?? el.value.length;
-            const end = el.selectionEnd ?? el.value.length;
-            el.value = el.value.slice(0, start) + text + el.value.slice(end);
-            el.selectionStart = el.selectionEnd = start + text.length;
-            el.dispatchEvent(new Event("input"));
-            el.focus();
+      function trySend() {
+        if (btnSend.disabled) return;
+        const now = Date.now();
+        if (now - lastSendAt < 200) return; // 小防抖
+        lastSendAt = now;
+
+        const text = ta.value.trim();
+        if (!text || !currentRoomId) return;
+
+        ws?.send(JSON.stringify({ type: 'chat_message', roomId: currentRoomId, text }));
+        appendMsg(currentRoomId, 'me', text);
+
+        ta.value = "";
+        checkSendEnabled();
+      }
+      function insertAtCursor(el, text) {
+        const start = el.selectionStart ?? el.value.length;
+        const end = el.selectionEnd ?? el.value.length;
+        el.value = el.value.slice(0, start) + text + el.value.slice(end);
+        el.selectionStart = el.selectionEnd = start + text.length;
+        el.dispatchEvent(new Event("input"));
+        el.focus();
+      }
+
+      // === 容量調整（控制 N 的一部分） ===
+      btnCapInc.addEventListener('click', () => {
+        capacity = Number(statCap.textContent || capacity) + 1;
+        statCap.textContent = capacity;
+        ws?.send(JSON.stringify({ type: 'set_capacity', capacity }));
+      });
+      btnCapDec.addEventListener('click', () => {
+        capacity = Math.max(1, Number(statCap.textContent || capacity) - 1);
+        statCap.textContent = capacity;
+        ws?.send(JSON.stringify({ type: 'set_capacity', capacity }));
+      });
+
+      // === 分隔線拖曳（保留你的 UI 手感） ===
+      (function setupSplitter() {
+        const MIN_CONV_PX = 120;
+        const MIN_EDIT_PX = 100;
+        let dragging = false, startY = 0, startConvPct = 60, pageRect = null;
+
+        function getConvPct() {
+          const v = getComputedStyle(chatPage).getPropertyValue("--conv-h").trim() || "60%";
+          return parseFloat(v);
         }
+        function setConvPct(pct) { chatPage.style.setProperty("--conv-h", pct + "%"); }
+        function pxToPct(px, total) { return (px / total) * 100; }
 
-        function escapeHTML(s) {
-            return s.replace(/[&<>"']/g, c => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-            }[c]));
+        function onDown(y) {
+          dragging = true;
+          pageRect = chatPage.getBoundingClientRect();
+          startY = y;
+          startConvPct = getConvPct();
+          document.body.style.cursor = "row-resize";
+          window.addEventListener("mousemove", onMoveMouse);
+          window.addEventListener("mouseup", onUp);
+          window.addEventListener("touchmove", onMoveTouch, { passive: false });
+          window.addEventListener("touchend", onUp);
         }
+        function onMove(y) {
+          if (!dragging || !pageRect) return;
+          const totalH = pageRect.height;
+          const startConvPx = (startConvPct / 100) * totalH;
+          let convPx = startConvPx + (y - startY);
+          convPx = Math.max(MIN_CONV_PX, Math.min(totalH - 8 - MIN_EDIT_PX, convPx));
+          const pct = Math.max(10, Math.min(90, pxToPct(convPx, totalH)));
+          setConvPct(pct);
+        }
+        function onUp() {
+          dragging = false;
+          document.body.style.cursor = "";
+          window.removeEventListener("mousemove", onMoveMouse);
+          window.removeEventListener("mouseup", onUp);
+          window.removeEventListener("touchmove", onMoveTouch);
+          window.removeEventListener("touchend", onUp);
+        }
+        function onMoveMouse(e) { onMove(e.clientY); }
+        function onMoveTouch(e) { e.preventDefault(); onMove(e.touches[0].clientY); }
 
-        // Splitter（拖曳/觸控 + 雙擊重置）
-        (function setupSplitter() {
-            const MIN_CONV_PX = 120;
-            const MIN_EDIT_PX = 100;
-            let dragging = false;
-            let startY = 0;
-            let startConvPct = 60;
-            let pageRect = null;
+        const splitter = document.getElementById("chatSplitter");
+        splitter.addEventListener("mousedown", e => onDown(e.clientY));
+        splitter.addEventListener("touchstart", e => onDown(e.touches[0].clientY), { passive: true });
+        splitter.addEventListener("dblclick", () => setConvPct(60));
+      })();
 
-            function getConvPct() {
-                const v = getComputedStyle(chatPage).getPropertyValue("--conv-h").trim() || "60%";
-                return parseFloat(v);
-            }
-            function setConvPct(pct) { chatPage.style.setProperty("--conv-h", pct + "%"); }
-            function pxToPct(px, total) { return (px / total) * 100; }
-
-            function onDown(y) {
-                dragging = true;
-                pageRect = chatPage.getBoundingClientRect();
-                startY = y;
-                startConvPct = getConvPct();
-                document.body.style.cursor = "row-resize";
-                window.addEventListener("mousemove", onMoveMouse);
-                window.addEventListener("mouseup", onUp);
-                window.addEventListener("touchmove", onMoveTouch, { passive: false });
-                window.addEventListener("touchend", onUp);
-            }
-            function onMove(y) {
-                if (!dragging || !pageRect) return;
-                const totalH = pageRect.height;
-                const startConvPx = (startConvPct / 100) * totalH;
-                let convPx = startConvPx + (y - startY);
-                convPx = Math.max(MIN_CONV_PX, Math.min(totalH - 8 - MIN_EDIT_PX, convPx));
-                const pct = Math.max(10, Math.min(90, pxToPct(convPx, totalH)));
-                setConvPct(pct);
-            }
-            function onUp() {
-                dragging = false;
-                document.body.style.cursor = "";
-                window.removeEventListener("mousemove", onMoveMouse);
-                window.removeEventListener("mouseup", onUp);
-                window.removeEventListener("touchmove", onMoveTouch);
-                window.removeEventListener("touchend", onUp);
-            }
-            function onMoveMouse(e) { onMove(e.clientY); }
-            function onMoveTouch(e) { e.preventDefault(); onMove(e.touches[0].clientY); }
-
-            const splitter = document.getElementById("chatSplitter");
-            splitter.addEventListener("mousedown", e => onDown(e.clientY));
-            splitter.addEventListener("touchstart", e => onDown(e.touches[0].clientY), { passive: true });
-            splitter.addEventListener("dblclick", () => setConvPct(60));
-        })();
+      // 開始連線
+      connectAgent();
     }
-});
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();

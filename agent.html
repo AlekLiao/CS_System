@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <title>客服工作臺</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; display:grid; gap:12px; }
+    #login, #desk { border:1px solid #ddd; border-radius:8px; padding:12px; max-width:980px; }
+    #desk { display:none; }
+    #tabs { display:flex; gap:8px; flex-wrap:wrap; }
+    .tab { padding:6px 10px; border:1px solid #ccc; border-radius:6px; cursor:pointer; }
+    .tab.active { background:#222; color:#fff; }
+    #log { height:260px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:6px; background:#fafafa; }
+    .sys { color:#666; font-size:12px; }
+    .msg { margin:6px 0; }
+    .me { text-align:right; }
+    .meta { color:#333; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <h3>客服登入</h3>
+    <label>名稱 <input id="name" placeholder="例如：小王" /></label>
+    <label style="margin-left:8px;">同時接線數 <input id="cap" type="number" min="1" value="3" style="width:60px;" /></label>
+    <button id="go">開始接線</button>
+  </div>
+
+  <div id="desk">
+    <div class="meta">
+      等待佇列：<span id="waiting">0</span> ｜ 目前已接：<span id="active">0</span> / <span id="capacity">0</span>
+      <button id="inc" style="margin-left:8px;">+容量</button>
+      <button id="dec">-容量</button>
+    </div>
+    <div id="tabs"></div>
+    <div id="roomInfo" class="sys"></div>
+    <div id="log"></div>
+    <div style="margin-top:8px;">
+      <input id="input" placeholder="輸入訊息..." style="width:70%;" />
+      <button id="sendBtn">送出</button>
+      <button id="endBtn" style="float:right;">結束此會話</button>
+    </div>
+  </div>
+
+  <script>
+    const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8080';
+    const login = document.getElementById('login');
+    const desk  = document.getElementById('desk');
+    const goBtn = document.getElementById('go');
+    const nameEl= document.getElementById('name');
+    const capEl = document.getElementById('cap');
+
+    const waitingEl=document.getElementById('waiting');
+    const activeEl =document.getElementById('active');
+    const capView  =document.getElementById('capacity');
+    const incBtn   =document.getElementById('inc');
+    const decBtn   =document.getElementById('dec');
+
+    const tabs = document.getElementById('tabs');
+    const logEl = document.getElementById('log');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('sendBtn');
+    const endBtn  = document.getElementById('endBtn');
+    const roomInfoEl = document.getElementById('roomInfo');
+
+    let ws, agentId=null;
+    const rooms = new Map(); // roomId -> { log:[], customerId }
+    let currentRoomId = null;
+
+    function drawTabs() {
+      tabs.innerHTML = '';
+      for (const [rid, info] of rooms.entries()) {
+        const t = document.createElement('div');
+        t.className = 'tab' + (rid === currentRoomId ? ' active' : '');
+        t.textContent = rid.slice(0,6);
+        t.onclick = () => { currentRoomId = rid; renderLog(); drawTabs(); roomInfoEl.textContent = '會話 ID：' + rid; };
+        tabs.appendChild(t);
+      }
+      if (!currentRoomId && rooms.size) {
+        currentRoomId = [...rooms.keys()][0];
+        roomInfoEl.textContent = '會話 ID：' + currentRoomId;
+      }
+    }
+    function renderLog() {
+      logEl.innerHTML = '';
+      const info = rooms.get(currentRoomId);
+      if (!info) return;
+      for (const m of info.log) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (m.from==='me'?'me':'');
+        div.textContent = (m.from==='me'?'我：':'客戶：') + m.text;
+        logEl.appendChild(div);
+      }
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    function pushLog(roomId, from, text) {
+      const info = rooms.get(roomId); if (!info) return;
+      info.log.push({ from, text });
+      if (roomId === currentRoomId) renderLog();
+    }
+
+    goBtn.onclick = () => {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => {
+        const name = nameEl.value.trim() || '客服';
+        const capacity = Math.max(1, Number(capEl.value||1));
+        ws.send(JSON.stringify({ type:'hello', role:'agent', name, capacity }));
+      };
+      ws.onmessage = ev => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'hello_ack' && msg.role==='agent') {
+          agentId = msg.agentId;
+          capView.textContent = msg.capacity;
+          activeEl.textContent = '0';
+          login.style.display='none';
+          desk.style.display='block';
+        }
+        if (msg.type === 'stats') {
+          waitingEl.textContent = msg.waiting;
+          activeEl.textContent  = msg.activeCount;
+          capView.textContent   = msg.capacity;
+        }
+        if (msg.type === 'chat_started') {
+          const { roomId, customerId } = msg;
+          rooms.set(roomId, { customerId, log:[] });
+          currentRoomId = roomId;
+          drawTabs(); renderLog();
+        }
+        if (msg.type === 'chat_message') {
+          pushLog(msg.roomId, 'customer', msg.text);
+        }
+        if (msg.type === 'chat_ended') {
+          const rid = msg.roomId;
+          rooms.delete(rid);
+          if (currentRoomId === rid) currentRoomId = null;
+          drawTabs(); renderLog();
+        }
+      };
+    };
+
+    sendBtn.onclick = () => {
+      const text = inputEl.value.trim();
+      if (!text || !currentRoomId) return;
+      ws.send(JSON.stringify({ type:'chat_message', roomId: currentRoomId, text }));
+      pushLog(currentRoomId, 'me', text);
+      inputEl.value = '';
+    };
+
+    endBtn.onclick = () => {
+      if (currentRoomId) ws.send(JSON.stringify({ type:'end_chat', roomId: currentRoomId }));
+    };
+
+    incBtn.onclick = () => {
+      const c = Number(capView.textContent||1) + 1;
+      ws.send(JSON.stringify({ type:'set_capacity', capacity: c }));
+    };
+    decBtn.onclick = () => {
+      const c = Math.max(1, Number(capView.textContent||1) - 1);
+      ws.send(JSON.stringify({ type:'set_capacity', capacity: c }));
+    };
+  </script>
+</body>
+</html>
